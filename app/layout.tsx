@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Zero-Dha Admin",
-  description: "Zero-Dha admin panel",
+  title: "Nokia Securities Admin",
+  description: "Nokia Securities admin panel",
 };
 
 export default function RootLayout({

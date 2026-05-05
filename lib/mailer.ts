@@ -47,7 +47,7 @@ export async function sendClientCredentialsEmail({
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;background:#f8fafc;color:#0f172a">
       <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px">
-        <h2 style="margin:0 0 12px;font-size:24px;color:#0369a1">Zero-Dha Login Credentials</h2>
+        <h2 style="margin:0 0 12px;font-size:24px;color:#0369a1">Nokia Securities Login Credentials</h2>
         <p style="margin:0 0 16px;font-size:14px;line-height:1.6">Hello ${name},</p>
         <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
           Your trading account has been activated by the admin team. Use the credentials below to sign in to the app.
@@ -69,7 +69,7 @@ export async function sendClientCredentialsEmail({
   const text = [
     `Hello ${name},`,
     "",
-    "Your Zero-Dha trading account has been activated.",
+    "Your Nokia Securities trading account has been activated.",
     `Client ID: ${clientId}`,
     `Password: ${password}`,
     "",
@@ -79,7 +79,7 @@ export async function sendClientCredentialsEmail({
   await getTransporter().sendMail({
     from,
     to,
-    subject: "Your Zero-Dha login credentials",
+    subject: "Your Nokia Securities login credentials",
     html,
     text,
   });
