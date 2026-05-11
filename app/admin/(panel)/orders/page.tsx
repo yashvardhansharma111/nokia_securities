@@ -6,6 +6,37 @@ import { adminJson } from "@/components/admin/adminFetch";
 import { ScopeUserBar } from "@/components/admin/ScopeUserBar";
 import { computeOrderPnl } from "@/lib/admin-orders-pnl";
 
+type LiveTrade = {
+  _id: string;
+  clientId?: string;
+  userName?: string;
+  symbol: string;
+  exchange: string;
+  side: "BUY" | "SELL";
+  qty: number;
+  price: number;
+  totalValue: number;
+  productType: string;
+  optionType?: string;
+  strikePrice?: number;
+  expiry?: string;
+  pnl: number;
+  status: string;
+  createdAt: string;
+};
+
+const emptyTrade = {
+  userId: "",
+  symbol: "",
+  exchange: "NSE",
+  side: "BUY" as "BUY" | "SELL",
+  qty: 1,
+  productType: "CNC",
+  optionType: "",
+  strikePrice: "",
+  expiry: "",
+};
+
 type OrderSegment = { key: string; label: string };
 
 type OrderRow = {
@@ -96,6 +127,15 @@ export default function AdminOrdersPage() {
   const [rows, setRows] = useState<OrderRow[]>([]);
   const [source, setSource] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Live trades (real MongoDB trades)
+  const [liveTrades, setLiveTrades] = useState<LiveTrade[]>([]);
+  const [liveTradesLoading, setLiveTradesLoading] = useState(false);
+  const [liveTradesErr, setLiveTradesErr] = useState<string | null>(null);
+  const [tradeForm, setTradeForm] = useState({ ...emptyTrade });
+  const [tradePlacing, setTradePlacing] = useState(false);
+  const [tradeMsg, setTradeMsg] = useState<string | null>(null);
+  const [tradeErr, setTradeErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [showOptionType, setShowOptionType] = useState(true);
@@ -217,6 +257,55 @@ export default function AdminOrdersPage() {
     setRows((prev) =>
       prev.map((r, i) => (i === idx ? patchRow(r, patch) : r)),
     );
+  }
+
+  const loadLiveTrades = useCallback(async () => {
+    setLiveTradesLoading(true);
+    setLiveTradesErr(null);
+    try {
+      const q = tradeForm.userId ? `?userId=${encodeURIComponent(tradeForm.userId)}` : "";
+      const data = await adminJson<{ trades: LiveTrade[] }>(`/api/admin/trades${q}`);
+      setLiveTrades(data.trades || []);
+    } catch (e) {
+      setLiveTradesErr(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLiveTradesLoading(false);
+    }
+  }, [tradeForm.userId]);
+
+  async function placeLiveTrade() {
+    if (!tradeForm.userId || !tradeForm.symbol || !tradeForm.exchange || !tradeForm.qty) {
+      setTradeErr("User ID, symbol, exchange and qty are required");
+      return;
+    }
+    setTradePlacing(true);
+    setTradeMsg(null);
+    setTradeErr(null);
+    try {
+      const result = await adminJson<{ message: string; newBalance: number }>(
+        "/api/admin/trades",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            userId: tradeForm.userId,
+            symbol: tradeForm.symbol.toUpperCase(),
+            exchange: tradeForm.exchange.toUpperCase(),
+            side: tradeForm.side,
+            qty: Number(tradeForm.qty),
+            productType: tradeForm.productType,
+            optionType: tradeForm.optionType || undefined,
+            strikePrice: tradeForm.strikePrice ? Number(tradeForm.strikePrice) : undefined,
+            expiry: tradeForm.expiry || undefined,
+          }),
+        },
+      );
+      setTradeMsg(`${result.message} · New balance: ₹${Number(result.newBalance).toLocaleString()}`);
+      void loadLiveTrades();
+    } catch (e) {
+      setTradeErr(e instanceof Error ? e.message : "Trade failed");
+    } finally {
+      setTradePlacing(false);
+    }
   }
 
   return (
@@ -689,6 +778,131 @@ export default function AdminOrdersPage() {
           </table>
         </div>
       </section>
+
+      {/* ── Place a real trade ── */}
+      <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+        <h3 className="mb-3 text-sm font-semibold text-emerald-900">Place live trade (real balance &amp; P/L)</h3>
+        <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">User ID (MongoDB _id)</label>
+            <select
+              className={inp}
+              value={tradeForm.userId}
+              onChange={(e) => setTradeForm((f) => ({ ...f, userId: e.target.value }))}
+            >
+              <option value="">— pick user —</option>
+              {users.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.clientId || u.email || u._id} {u.fullName ? `· ${u.fullName}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">Symbol</label>
+            <input className={inp} placeholder="NIFTY / RELIANCE / GOLD" value={tradeForm.symbol}
+              onChange={(e) => setTradeForm((f) => ({ ...f, symbol: e.target.value.toUpperCase() }))} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">Exchange</label>
+            <select className={inp} value={tradeForm.exchange}
+              onChange={(e) => setTradeForm((f) => ({ ...f, exchange: e.target.value }))}>
+              <option>NSE</option><option>BSE</option><option>NFO</option>
+              <option>BFO</option><option>MCX</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">Side</label>
+            <select className={inp} value={tradeForm.side}
+              onChange={(e) => setTradeForm((f) => ({ ...f, side: e.target.value as "BUY" | "SELL" }))}>
+              <option>BUY</option><option>SELL</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">Qty</label>
+            <input type="number" min={1} className={`${inpNum} w-20`} value={tradeForm.qty}
+              onChange={(e) => setTradeForm((f) => ({ ...f, qty: Number(e.target.value) }))} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">Product</label>
+            <select className={inp} value={tradeForm.productType}
+              onChange={(e) => setTradeForm((f) => ({ ...f, productType: e.target.value }))}>
+              <option>CNC</option><option>MIS</option><option>NRML</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">Opt type</label>
+            <select className={inp} value={tradeForm.optionType}
+              onChange={(e) => setTradeForm((f) => ({ ...f, optionType: e.target.value }))}>
+              <option value="">—</option><option>CE</option><option>PE</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">Strike</label>
+            <input type="number" className={`${inpNum} w-20`} placeholder="0" value={tradeForm.strikePrice}
+              onChange={(e) => setTradeForm((f) => ({ ...f, strikePrice: e.target.value }))} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-medium text-slate-500">Expiry</label>
+            <input className={inp} placeholder="25APR2026" value={tradeForm.expiry}
+              onChange={(e) => setTradeForm((f) => ({ ...f, expiry: e.target.value }))} />
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" disabled={tradePlacing}
+            onClick={() => void placeLiveTrade()}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+            {tradePlacing ? "Placing…" : `${tradeForm.side} at market`}
+          </button>
+          <button type="button" disabled={liveTradesLoading}
+            onClick={() => void loadLiveTrades()}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+            {liveTradesLoading ? "Loading…" : "Load trades"}
+          </button>
+        </div>
+        {tradeMsg && <p className="mt-2 rounded bg-emerald-100 px-3 py-1.5 text-xs text-emerald-900">{tradeMsg}</p>}
+        {tradeErr && <p className="mt-2 rounded bg-rose-100 px-3 py-1.5 text-xs text-rose-900">{tradeErr}</p>}
+      </section>
+
+      {/* ── Live trades table ── */}
+      {liveTrades.length > 0 && (
+        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-sm font-semibold text-slate-900">Live trades (MongoDB)</h3>
+          {liveTradesErr && <p className="mb-2 text-xs text-rose-700">{liveTradesErr}</p>}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-[11px]">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
+                  {["User","Symbol","Exch","Side","Qty","Price","Total","Product","Opt","Status","Date"].map((h) => (
+                    <th key={h} className="whitespace-nowrap px-2 py-2 font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {liveTrades.map((t) => (
+                  <tr key={t._id} className="border-b border-slate-100 hover:bg-slate-50/80">
+                    <td className="px-2 py-1 text-slate-700">{t.clientId || t.userName || t._id.slice(-6)}</td>
+                    <td className="px-2 py-1 font-medium">{t.symbol}</td>
+                    <td className="px-2 py-1 text-slate-500">{t.exchange}</td>
+                    <td className={`px-2 py-1 font-semibold ${t.side === "BUY" ? "text-emerald-700" : "text-rose-600"}`}>{t.side}</td>
+                    <td className="px-2 py-1 text-right">{t.qty}</td>
+                    <td className="px-2 py-1 text-right">₹{Number(t.price).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right">₹{Number(t.totalValue).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-slate-500">{t.productType}</td>
+                    <td className="px-2 py-1 text-slate-500">{t.optionType || "—"}</td>
+                    <td className="px-2 py-1">
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.status === "EXECUTED" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>
+                        {t.status}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1 text-slate-400">{new Date(t.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

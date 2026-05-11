@@ -109,13 +109,19 @@ export async function resolveTradable(
   const eq = c.bySymbol.get(`${exchange}:${upper}-EQ`);
   if (eq) return eq;
 
-  // MCX: find nearest-month future for this underlying
+  // MCX: find nearest-month future for this underlying.
+  // Match by name field (authoritative). If name is empty or inconsistent in the scrip
+  // master for a given commodity, fall back to symbol-prefix match (strip digits/expiry).
   if (exchange === "MCX") {
     const futures: Instrument[] = [];
     for (const i of c.data) {
       if (i.exch_seg !== "MCX") continue;
       if (i.instrumenttype !== "FUTCOM") continue;
-      if (i.name.toUpperCase() !== upper) continue;
+      const nameMatch = i.name.toUpperCase() === upper;
+      // e.g. "CRUDEOIL25APR2026FUT" → strip trailing digits/expiry → "CRUDEOIL"
+      const symBase = i.symbol.replace(/\d.*$/, "").toUpperCase();
+      const symMatch = symBase === upper;
+      if (!nameMatch && !symMatch) continue;
       futures.push(i);
     }
     if (futures.length) {
@@ -123,10 +129,11 @@ export async function resolveTradable(
         (a, b) => parseAngelExpiry(a.expiry).getTime() - parseAngelExpiry(b.expiry).getTime(),
       );
       const now = Date.now();
-      return (
-        futures.find((f) => parseAngelExpiry(f.expiry).getTime() > now) || futures[0]
-      );
+      const resolved = futures.find((f) => parseAngelExpiry(f.expiry).getTime() > now) || futures[0];
+      console.log(`[resolveTradable] MCX:${symbol} → ${resolved.symbol} (name="${resolved.name}" token=${resolved.token})`);
+      return resolved;
     }
+    console.warn(`[resolveTradable] MCX:${symbol} — no FUTCOM found. Searched ${c.data.filter(i=>i.exch_seg==="MCX"&&i.instrumenttype==="FUTCOM").length} MCX futures.`);
   }
 
   return undefined;

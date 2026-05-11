@@ -60,16 +60,20 @@ export async function GET(request: NextRequest) {
         spotPrice = Number(spotResult.data.fetched[0].ltp);
       }
     } else {
-      // For stocks/commodities — spot = underlying equity LTP
-      const { findBySymbol } = await import("@/lib/angelone/instruments");
+      // For stocks/commodities — spot = underlying equity/futures LTP
+      const { findBySymbol, resolveTradable } = await import("@/lib/angelone/instruments");
       const underlyingExchange = exchange === "NFO" ? "NSE" : exchange === "BFO" ? "BSE" : "MCX";
+      // For MCX, use resolveTradable to find the nearest futures contract (FUTCOM).
+      // findBySymbol won't work because MCX symbols include expiry (e.g. "CRUDEOIL25APR2026FUT").
       const inst =
-        (await findBySymbol(underlyingExchange, symbol)) ||
-        (await findBySymbol(underlyingExchange, `${symbol}-EQ`));
+        underlyingExchange === "MCX"
+          ? await resolveTradable("MCX", symbol)
+          : (await findBySymbol(underlyingExchange, symbol)) ||
+            (await findBySymbol(underlyingExchange, `${symbol}-EQ`));
       if (inst) {
         const spotResult = await angelPost(
           "/rest/secure/angelbroking/market/v1/quote/",
-          { mode: "LTP", exchangeTokens: { [underlyingExchange]: [inst.token] } },
+          { mode: "LTP", exchangeTokens: { [inst.exch_seg]: [inst.token] } },
         );
         if (spotResult.status && spotResult.data?.fetched?.[0]) {
           spotPrice = Number(spotResult.data.fetched[0].ltp);

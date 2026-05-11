@@ -81,9 +81,7 @@ const COMMODITY_DEFS = [
   { label: "Brent Crude", symbol: "BZ=F", tvSymbol: "TVC:UKOIL" },
   { label: "Natural Gas", symbol: "NG=F", tvSymbol: "NYMEX:NG1!" },
   { label: "Copper", symbol: "HG=F", tvSymbol: "COMEX:HG1!" },
-  { label: "Wheat", symbol: "ZW=F", tvSymbol: "CBOT:ZW1!" },
-  { label: "Corn", symbol: "ZC=F", tvSymbol: "CBOT:ZC1!" },
-  { label: "Platinum", symbol: "PL=F", tvSymbol: "NYMEX:PL1!" },
+  // Platinum (PL=F), Wheat (ZW=F), Corn (ZC=F) — not listed on MCX/Angel One
 ];
 
 const MUTUAL_FUND_QUERIES = [
@@ -255,36 +253,6 @@ const fallbackConfig: HomeConfig = {
       change: 0.03,
       changePct: 0.73,
       tvSymbol: "COMEX:HG1!",
-
-      currency: "USD",
-    },
-    {
-      name: "Wheat",
-      symbol: "ZW=F",
-      value: 542.5,
-      change: -4.2,
-      changePct: -0.77,
-      tvSymbol: "CBOT:ZW1!",
-
-      currency: "USD",
-    },
-    {
-      name: "Corn",
-      symbol: "ZC=F",
-      value: 418.25,
-      change: 1.5,
-      changePct: 0.36,
-      tvSymbol: "CBOT:ZC1!",
-
-      currency: "USD",
-    },
-    {
-      name: "Platinum",
-      symbol: "PL=F",
-      value: 978.3,
-      change: 6.1,
-      changePct: 0.63,
-      tvSymbol: "NYMEX:PL1!",
 
       currency: "USD",
     },

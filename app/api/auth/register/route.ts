@@ -1,5 +1,6 @@
 import { apiErrorResponse } from "@/lib/api-error";
 import { getDb } from "@/lib/mongodb";
+import { isVerified, deleteOtp } from "@/lib/otp-cache";
 import { NextResponse } from "next/server";
 
 /** Accept only HTTPS URLs from UploadThing / UFS CDNs (not arbitrary user-supplied hosts). */
@@ -42,6 +43,17 @@ export async function POST(request: Request) {
     if (!fullName || !email || !phone) {
       return NextResponse.json(
         { message: "Full name, email and phone are required" },
+        { status: 400 },
+      );
+    }
+
+    // Verify phone OTP (in-memory cache)
+    const normalizedPhone = phone.replace(/\D/g, "");
+    const phoneDigits =
+      normalizedPhone.length > 10 ? normalizedPhone.slice(-10) : normalizedPhone;
+    if (!isVerified(phoneDigits)) {
+      return NextResponse.json(
+        { message: "Phone number not verified. Please verify OTP first." },
         { status: 400 },
       );
     }
@@ -108,6 +120,9 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    // Consume the OTP so it can't be reused
+    deleteOtp(phoneDigits);
 
     await users.insertOne({
       fullName,

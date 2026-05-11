@@ -65,11 +65,12 @@ export async function GET(request: NextRequest) {
       toDate.getTime() - rangeConfig.days * 24 * 60 * 60 * 1000,
     );
 
-    // Intraday start-of-day: MCX opens 09:00, NSE/BSE open 09:15.
-    // Never clamp `toDate` — Angel returns whatever's traded so far (MCX runs till 23:30).
+    // Intraday start-of-day: MCX opens 09:00 IST, NSE/BSE open 09:15 IST.
+    // Use UTC equivalents (IST = UTC+5:30) so the server timezone doesn't matter.
+    // MCX 09:00 IST = 03:30 UTC | NSE 09:15 IST = 03:45 UTC
     if (range === "1D") {
       const mcx = resolvedExchange === "MCX";
-      fromDate.setHours(mcx ? 9 : 9, mcx ? 0 : 15, 0, 0);
+      fromDate.setUTCHours(3, mcx ? 30 : 45, 0, 0);
     }
 
     const body = {
