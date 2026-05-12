@@ -8,26 +8,31 @@ type SendClientCredentialsEmailParams = {
 };
 
 let transporter: nodemailer.Transporter | null = null;
+let transporterUser: string | undefined;
 
 function getTransporter() {
-  if (transporter) {
-    return transporter;
-  }
-
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
+
+  // Rebuild if credentials changed (e.g. after .env edit + server restart)
+  if (transporter && transporterUser === user) {
+    return transporter;
+  }
 
   if (!user || !pass) {
     throw new Error("SMTP credentials are not configured");
   }
 
+  const host = process.env.SMTP_HOST || "smtp.titan.email";
+  const port = Number(process.env.SMTP_PORT || "465");
+
   transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user,
-      pass,
-    },
+    host,
+    port,
+    secure: port === 465, // true for 465 (SSL), false for 587 (STARTTLS)
+    auth: { user, pass },
   });
+  transporterUser = user;
 
   return transporter;
 }
@@ -38,7 +43,7 @@ export async function sendClientCredentialsEmail({
   clientId,
   password,
 }: SendClientCredentialsEmailParams) {
-  const from = process.env.SMTP_USER;
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
   if (!from) {
     throw new Error("SMTP sender is not configured");
   }
