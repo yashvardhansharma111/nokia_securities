@@ -41,10 +41,10 @@ export async function GET(
       return NextResponse.json({ message: "Proof not found" }, { status: 404 });
     }
 
-    const buffer = (doc.proofData as { buffer: Buffer }).buffer;
+    const buffer = Buffer.from((doc.proofData as { buffer: Buffer }).buffer);
     const contentType = (doc.proofContentType as string) || "image/jpeg";
 
-    return new Response(buffer, {
+    return new Response(buffer as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": contentType,
