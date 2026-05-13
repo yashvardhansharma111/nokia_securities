@@ -8,14 +8,16 @@ type SendClientCredentialsEmailParams = {
 };
 
 let transporter: nodemailer.Transporter | null = null;
-let transporterUser: string | undefined;
+let transporterKey: string | undefined;
 
 function getTransporter() {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
+  const host = process.env.SMTP_HOST || "smtpout.secureserver.net";
+  const port = Number(process.env.SMTP_PORT || "465");
 
-  // Rebuild if credentials changed (e.g. after .env edit + server restart)
-  if (transporter && transporterUser === user) {
+  const key = `${host}:${port}:${user}:${pass}`;
+  if (transporter && transporterKey === key) {
     return transporter;
   }
 
@@ -23,18 +25,45 @@ function getTransporter() {
     throw new Error("SMTP credentials are not configured");
   }
 
-  const host = process.env.SMTP_HOST || "smtp.titan.email";
-  const port = Number(process.env.SMTP_PORT || "465");
-
   transporter = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465, // true for 465 (SSL), false for 587 (STARTTLS)
+    secure: port === 465,
     auth: { user, pass },
   });
-  transporterUser = user;
+  transporterKey = key;
 
   return transporter;
+}
+
+export async function sendOtpEmail(to: string, otp: string) {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  if (!from) throw new Error("SMTP sender is not configured");
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#f8fafc;color:#0f172a">
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:24px">
+        <h2 style="margin:0 0 12px;font-size:22px;color:#0369a1">Password Reset OTP</h2>
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.6">
+          Use the code below to reset your Nokia Securities password. It expires in 10 minutes.
+        </p>
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:20px;text-align:center;margin:16px 0">
+          <span style="font-size:36px;font-weight:700;letter-spacing:8px;color:#0369a1">${otp}</span>
+        </div>
+        <p style="margin:12px 0 0;font-size:12px;color:#475569">
+          If you did not request a password reset, ignore this email.
+        </p>
+      </div>
+    </div>
+  `;
+
+  await getTransporter().sendMail({
+    from,
+    to,
+    subject: "Your Nokia Securities password reset OTP",
+    html,
+    text: `Your Nokia Securities password reset OTP is: ${otp}\n\nIt expires in 10 minutes.`,
+  });
 }
 
 export async function sendClientCredentialsEmail({

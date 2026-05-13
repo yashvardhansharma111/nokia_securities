@@ -9,10 +9,12 @@ type Req = {
   userName: string;
   userEmail: string;
   amount: number;
+  method?: string;
   reference?: string;
   note?: string;
   status: string;
   createdAt?: string;
+  hasProof?: boolean;
 };
 
 export default function AdminFundsPage() {
@@ -20,6 +22,7 @@ export default function AdminFundsPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [proofId, setProofId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,15 +82,44 @@ export default function AdminFundsPage() {
         <p className="mt-4 rounded-lg bg-rose-50 px-4 py-2 text-sm text-rose-900">{err}</p>
       ) : null}
 
+      {/* Proof image lightbox */}
+      {proofId ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setProofId(null)}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-[90vw] overflow-auto rounded-xl bg-white p-2 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setProofId(null)}
+              className="absolute right-2 top-2 rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
+            >
+              Close
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/funds/proof/${proofId}`}
+              alt="Payment proof"
+              className="max-h-[85vh] max-w-[85vw] rounded-lg object-contain"
+            />
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
+          <table className="w-full min-w-[1000px] text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
                 <th className="px-3 py-3">User</th>
                 <th className="px-3 py-3">Type</th>
+                <th className="px-3 py-3">Method</th>
                 <th className="px-3 py-3 text-right">Amount</th>
                 <th className="px-3 py-3">Reference</th>
+                <th className="px-3 py-3">Proof</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Created</th>
                 <th className="px-3 py-3">Actions</th>
@@ -96,13 +128,13 @@ export default function AdminFundsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
                     Loading…
                   </td>
                 </tr>
               ) : requests.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
                     No requests.
                   </td>
                 </tr>
@@ -114,11 +146,25 @@ export default function AdminFundsPage() {
                       <div className="text-xs text-slate-500">{r.userEmail}</div>
                     </td>
                     <td className="px-3 py-3 capitalize text-slate-700">{r.type || "add"}</td>
+                    <td className="px-3 py-3 capitalize text-slate-600">{r.method || "upi"}</td>
                     <td className="px-3 py-3 text-right tabular-nums font-medium text-slate-900">
                       ₹{r.amount?.toLocaleString("en-IN")}
                     </td>
-                    <td className="px-3 py-3 max-w-[180px] truncate text-slate-600">
+                    <td className="px-3 py-3 max-w-[160px] truncate text-slate-600">
                       {r.reference || "—"}
+                    </td>
+                    <td className="px-3 py-3">
+                      {r.hasProof ? (
+                        <button
+                          type="button"
+                          onClick={() => setProofId(r._id)}
+                          className="rounded bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-700"
+                        >
+                          View
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       <span

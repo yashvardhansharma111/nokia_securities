@@ -10,6 +10,8 @@ type User = {
   clientId?: string;
   email?: string;
   phone?: string;
+  panNumber?: string;
+  aadhaarNumber?: string;
   status?: string;
   tradingBalance?: number;
   margin?: number;
@@ -230,12 +232,15 @@ export default function AdminUsersPage() {
           <h3 className="font-medium text-slate-900">All users</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[1200px] w-full border-collapse text-left text-sm">
+          <table className="min-w-[1500px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Client ID</th>
                 <th className="px-3 py-3">Email</th>
+                <th className="px-3 py-3">Phone</th>
+                <th className="px-3 py-3">PAN</th>
+                <th className="px-3 py-3">Aadhaar</th>
                 <th className="px-3 py-3">Password</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3 text-right">Balance</th>
@@ -247,7 +252,7 @@ export default function AdminUsersPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={12} className="px-3 py-8 text-center text-slate-500">
                     Loading…
                   </td>
                 </tr>
@@ -266,6 +271,9 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-3 py-3 text-slate-700">{u.clientId || "—"}</td>
                       <td className="px-3 py-3 text-slate-600">{u.email || "—"}</td>
+                      <td className="px-3 py-3 text-slate-600">{u.phone || "—"}</td>
+                      <td className="px-3 py-3 font-mono text-xs text-slate-700 uppercase">{u.panNumber || "—"}</td>
+                      <td className="px-3 py-3 font-mono text-xs text-slate-600">{u.aadhaarNumber || "—"}</td>
                       <td className="px-3 py-3 font-mono text-xs text-slate-600">
                         {u.adminPlainPassword || "—"}
                       </td>

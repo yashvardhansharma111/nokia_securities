@@ -136,6 +136,11 @@ export default function AdminOrdersPage() {
   const [tradePlacing, setTradePlacing] = useState(false);
   const [tradeMsg, setTradeMsg] = useState<string | null>(null);
   const [tradeErr, setTradeErr] = useState<string | null>(null);
+  // Per-row edit / save / delete state
+  const [editedTrades, setEditedTrades] = useState<Record<string, Partial<LiveTrade>>>({});
+  const [savingTrade, setSavingTrade] = useState<Record<string, boolean>>({});
+  const [deletingTrade, setDeletingTrade] = useState<Record<string, boolean>>({});
+  const [tradeFilterUserId, setTradeFilterUserId] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [showOptionType, setShowOptionType] = useState(true);
@@ -263,15 +268,61 @@ export default function AdminOrdersPage() {
     setLiveTradesLoading(true);
     setLiveTradesErr(null);
     try {
-      const q = tradeForm.userId ? `?userId=${encodeURIComponent(tradeForm.userId)}` : "";
+      const q = tradeFilterUserId ? `?userId=${encodeURIComponent(tradeFilterUserId)}` : "";
       const data = await adminJson<{ trades: LiveTrade[] }>(`/api/admin/trades${q}`);
       setLiveTrades(data.trades || []);
+      setEditedTrades({});
     } catch (e) {
       setLiveTradesErr(e instanceof Error ? e.message : "Failed to load");
     } finally {
       setLiveTradesLoading(false);
     }
-  }, [tradeForm.userId]);
+  }, [tradeFilterUserId]);
+
+  function patchEdit(id: string, patch: Partial<LiveTrade>) {
+    setEditedTrades((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+  }
+
+  function fieldVal<K extends keyof LiveTrade>(trade: LiveTrade, key: K): LiveTrade[K] {
+    return (editedTrades[trade._id]?.[key] ?? trade[key]) as LiveTrade[K];
+  }
+
+  async function saveLiveTrade(tradeId: string) {
+    const edits = editedTrades[tradeId];
+    if (!edits || Object.keys(edits).length === 0) return;
+    setSavingTrade((p) => ({ ...p, [tradeId]: true }));
+    setTradeErr(null);
+    setTradeMsg(null);
+    try {
+      await adminJson("/api/admin/trades", {
+        method: "PATCH",
+        body: JSON.stringify({ tradeId, ...edits }),
+      });
+      setTradeMsg("Trade updated.");
+      setEditedTrades((prev) => { const n = { ...prev }; delete n[tradeId]; return n; });
+      void loadLiveTrades();
+    } catch (e) {
+      setTradeErr(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setSavingTrade((p) => ({ ...p, [tradeId]: false }));
+    }
+  }
+
+  async function deleteLiveTrade(tradeId: string) {
+    if (!confirm("Delete this trade permanently? This cannot be undone.")) return;
+    setDeletingTrade((p) => ({ ...p, [tradeId]: true }));
+    setTradeErr(null);
+    setTradeMsg(null);
+    try {
+      await adminJson(`/api/admin/trades?id=${encodeURIComponent(tradeId)}`, { method: "DELETE" });
+      setTradeMsg("Trade deleted.");
+      void loadLiveTrades();
+    } catch (e) {
+      setTradeErr(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeletingTrade((p) => ({ ...p, [tradeId]: false }));
+    }
+  }
 
   async function placeLiveTrade() {
     if (!tradeForm.userId || !tradeForm.symbol || !tradeForm.exchange || !tradeForm.qty) {
@@ -854,55 +905,232 @@ export default function AdminOrdersPage() {
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
             {tradePlacing ? "Placing…" : `${tradeForm.side} at market`}
           </button>
-          <button type="button" disabled={liveTradesLoading}
-            onClick={() => void loadLiveTrades()}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50">
-            {liveTradesLoading ? "Loading…" : "Load trades"}
-          </button>
         </div>
         {tradeMsg && <p className="mt-2 rounded bg-emerald-100 px-3 py-1.5 text-xs text-emerald-900">{tradeMsg}</p>}
         {tradeErr && <p className="mt-2 rounded bg-rose-100 px-3 py-1.5 text-xs text-rose-900">{tradeErr}</p>}
       </section>
 
-      {/* ── Live trades table ── */}
-      {liveTrades.length > 0 && (
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-3 text-sm font-semibold text-slate-900">Live trades (MongoDB)</h3>
-          {liveTradesErr && <p className="mb-2 text-xs text-rose-700">{liveTradesErr}</p>}
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-[11px]">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
-                  {["User","Symbol","Exch","Side","Qty","Price","Total","Product","Opt","Status","Date"].map((h) => (
-                    <th key={h} className="whitespace-nowrap px-2 py-2 font-medium">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {liveTrades.map((t) => (
-                  <tr key={t._id} className="border-b border-slate-100 hover:bg-slate-50/80">
-                    <td className="px-2 py-1 text-slate-700">{t.clientId || t.userName || t._id.slice(-6)}</td>
-                    <td className="px-2 py-1 font-medium">{t.symbol}</td>
-                    <td className="px-2 py-1 text-slate-500">{t.exchange}</td>
-                    <td className={`px-2 py-1 font-semibold ${t.side === "BUY" ? "text-emerald-700" : "text-rose-600"}`}>{t.side}</td>
-                    <td className="px-2 py-1 text-right">{t.qty}</td>
-                    <td className="px-2 py-1 text-right">₹{Number(t.price).toLocaleString()}</td>
-                    <td className="px-2 py-1 text-right">₹{Number(t.totalValue).toLocaleString()}</td>
-                    <td className="px-2 py-1 text-slate-500">{t.productType}</td>
-                    <td className="px-2 py-1 text-slate-500">{t.optionType || "—"}</td>
-                    <td className="px-2 py-1">
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.status === "EXECUTED" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>
-                        {t.status}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1 text-slate-400">{new Date(t.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* ── Live trades CRUD table ── */}
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-900">Live trades — MongoDB CRUD</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className={inp}
+              value={tradeFilterUserId}
+              onChange={(e) => setTradeFilterUserId(e.target.value)}
+            >
+              <option value="">— all users —</option>
+              {users.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.clientId || u.email || u._id} {u.fullName ? `· ${u.fullName}` : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={liveTradesLoading}
+              onClick={() => void loadLiveTrades()}
+              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+            >
+              {liveTradesLoading ? "Loading…" : "Load trades"}
+            </button>
           </div>
-        </section>
-      )}
+        </div>
+
+        {liveTradesErr && <p className="mb-2 rounded bg-rose-50 px-3 py-1.5 text-xs text-rose-700">{liveTradesErr}</p>}
+        {tradeMsg && <p className="mb-2 rounded bg-emerald-50 px-3 py-1.5 text-xs text-emerald-800">{tradeMsg}</p>}
+        {tradeErr && <p className="mb-2 rounded bg-rose-50 px-3 py-1.5 text-xs text-rose-700">{tradeErr}</p>}
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-[11px]">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase text-slate-500">
+                <th className="whitespace-nowrap px-2 py-2">User</th>
+                <th className="whitespace-nowrap px-2 py-2">Symbol</th>
+                <th className="whitespace-nowrap px-2 py-2">Exch</th>
+                <th className="whitespace-nowrap px-2 py-2">Side</th>
+                <th className="whitespace-nowrap px-2 py-2">Qty</th>
+                <th className="whitespace-nowrap px-2 py-2">Price</th>
+                <th className="whitespace-nowrap px-2 py-2">Total</th>
+                <th className="whitespace-nowrap px-2 py-2">P&amp;L</th>
+                <th className="whitespace-nowrap px-2 py-2">Product</th>
+                <th className="whitespace-nowrap px-2 py-2">Opt</th>
+                <th className="whitespace-nowrap px-2 py-2">Strike</th>
+                <th className="whitespace-nowrap px-2 py-2">Expiry</th>
+                <th className="whitespace-nowrap px-2 py-2">Status</th>
+                <th className="whitespace-nowrap px-2 py-2">Date</th>
+                <th className="whitespace-nowrap px-2 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {liveTrades.length === 0 ? (
+                <tr>
+                  <td colSpan={15} className="px-2 py-8 text-center text-slate-400">
+                    {liveTradesLoading ? "Loading…" : "No trades loaded. Pick a user and click Load trades."}
+                  </td>
+                </tr>
+              ) : (
+                liveTrades.map((t) => {
+                  const dirty = !!editedTrades[t._id] && Object.keys(editedTrades[t._id]).length > 0;
+                  const saving = !!savingTrade[t._id];
+                  const deleting = !!deletingTrade[t._id];
+                  return (
+                    <tr key={t._id} className={`border-b border-slate-100 ${dirty ? "bg-amber-50/60" : "hover:bg-slate-50/60"}`}>
+                      <td className="px-2 py-1 text-slate-600 whitespace-nowrap">
+                        {t.clientId || t.userName || t._id.slice(-6)}
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          className={inp}
+                          value={String(fieldVal(t, "symbol"))}
+                          onChange={(e) => patchEdit(t._id, { symbol: e.target.value.toUpperCase() })}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <select
+                          className={inp}
+                          value={String(fieldVal(t, "exchange"))}
+                          onChange={(e) => patchEdit(t._id, { exchange: e.target.value })}
+                        >
+                          {["NSE","BSE","NFO","BFO","MCX","CDS"].map((x) => (
+                            <option key={x}>{x}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <select
+                          className={`${inp} ${fieldVal(t, "side") === "BUY" ? "text-emerald-700 font-semibold" : "text-rose-600 font-semibold"}`}
+                          value={String(fieldVal(t, "side"))}
+                          onChange={(e) => patchEdit(t._id, { side: e.target.value as "BUY" | "SELL" })}
+                        >
+                          <option value="BUY">BUY</option>
+                          <option value="SELL">SELL</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="number"
+                          min={1}
+                          className={`${inpNum} w-16`}
+                          value={Number(fieldVal(t, "qty"))}
+                          onChange={(e) => patchEdit(t._id, { qty: Number(e.target.value) })}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="number"
+                          step="any"
+                          className={`${inpNum} w-20`}
+                          value={Number(fieldVal(t, "price"))}
+                          onChange={(e) => patchEdit(t._id, { price: Number(e.target.value) })}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="number"
+                          step="any"
+                          className={`${inpNum} w-24`}
+                          value={Number(fieldVal(t, "totalValue"))}
+                          onChange={(e) => patchEdit(t._id, { totalValue: Number(e.target.value) })}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="number"
+                          step="any"
+                          className={`${inpNum} w-20 ${Number(fieldVal(t, "pnl")) >= 0 ? "text-emerald-700" : "text-rose-600"}`}
+                          value={Number(fieldVal(t, "pnl"))}
+                          onChange={(e) => patchEdit(t._id, { pnl: Number(e.target.value) })}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <select
+                          className={inp}
+                          value={String(fieldVal(t, "productType") || "CNC")}
+                          onChange={(e) => patchEdit(t._id, { productType: e.target.value })}
+                        >
+                          {["CNC","MIS","NRML"].map((x) => <option key={x}>{x}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <select
+                          className={inp}
+                          value={String(fieldVal(t, "optionType") || "")}
+                          onChange={(e) => patchEdit(t._id, { optionType: e.target.value })}
+                        >
+                          <option value="">—</option>
+                          <option value="CE">CE</option>
+                          <option value="PE">PE</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          type="number"
+                          step="any"
+                          className={`${inpNum} w-16`}
+                          placeholder="0"
+                          value={Number(fieldVal(t, "strikePrice") || 0)}
+                          onChange={(e) => patchEdit(t._id, { strikePrice: Number(e.target.value) })}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          className={`${inp} w-24`}
+                          placeholder="25APR2026"
+                          value={String(fieldVal(t, "expiry") || "")}
+                          onChange={(e) => patchEdit(t._id, { expiry: e.target.value })}
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <select
+                          className={inp}
+                          value={String(fieldVal(t, "status"))}
+                          onChange={(e) => patchEdit(t._id, { status: e.target.value })}
+                        >
+                          {["EXECUTED","PENDING","CANCELLED","REJECTED"].map((x) => (
+                            <option key={x}>{x}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-2 py-1 text-slate-400 whitespace-nowrap">
+                        {new Date(t.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
+                      </td>
+                      <td className="px-2 py-1">
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            disabled={saving || !dirty}
+                            onClick={() => void saveLiveTrade(t._id)}
+                            className="rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-emerald-700 disabled:opacity-40"
+                          >
+                            {saving ? "…" : "Save"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deleting}
+                            onClick={() => void deleteLiveTrade(t._id)}
+                            className="rounded border border-rose-300 px-2 py-0.5 text-[10px] font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+                          >
+                            {deleting ? "…" : "Del"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {liveTrades.length > 0 && (
+          <p className="mt-2 text-[10px] text-slate-400">
+            {liveTrades.length} trade{liveTrades.length !== 1 ? "s" : ""}
+            {tradeFilterUserId ? " for selected user" : " across all users"}.
+            Rows highlighted in amber have unsaved changes.
+          </p>
+        )}
+      </section>
     </div>
   );
 }

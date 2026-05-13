@@ -56,6 +56,7 @@ export async function GET() {
         createdAt: r.createdAt,
         userName: u?.fullName || "Unknown",
         userEmail: u?.email || "",
+        hasProof: !!r.proofData,
       };
     });
 

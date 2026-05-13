@@ -432,9 +432,9 @@ export async function getPositions(userId: string) {
     docs.map((p) => ({ symbol: p.symbol, exchange: p.exchange })),
   );
 
-  return docs.map((pos) => {
+  return docs.map((pos: any) => {
     const ltp = ltpMap.get(`${pos.exchange}:${pos.symbol}`) ?? pos.avgPrice;
-    const pnl = (ltp - pos.avgPrice) * pos.qty;
+    const pnl = pos.pnlOverride != null ? Number(pos.pnlOverride) : (ltp - pos.avgPrice) * pos.qty;
     const pnlPct = pos.avgPrice > 0 ? (pnl / (pos.avgPrice * pos.qty)) * 100 : 0;
     return {
       ...pos,
@@ -457,7 +457,7 @@ export async function getTradeHistory(userId: string, limit = 50) {
     .toArray();
 }
 
-/** Get holdings (long positions in CNC). */
+/** Get holdings (long CNC positions NOT placed by admin). */
 export async function getHoldings(userId: string) {
   const positions = await positionsCol();
   const docs = await positions
@@ -465,6 +465,7 @@ export async function getHoldings(userId: string) {
       userId: new ObjectId(userId),
       side: "BUY",
       productType: "CNC",
+      source: { $ne: "admin" },
     })
     .sort({ updatedAt: -1 })
     .toArray();
@@ -475,9 +476,9 @@ export async function getHoldings(userId: string) {
     docs.map((p) => ({ symbol: p.symbol, exchange: p.exchange })),
   );
 
-  return docs.map((pos) => {
+  return docs.map((pos: any) => {
     const ltp = ltpMap.get(`${pos.exchange}:${pos.symbol}`) ?? pos.avgPrice;
-    const pnl = (ltp - pos.avgPrice) * pos.qty;
+    const pnl = pos.pnlOverride != null ? Number(pos.pnlOverride) : (ltp - pos.avgPrice) * pos.qty;
     const pnlPct = pos.avgPrice > 0 ? (pnl / (pos.avgPrice * pos.qty)) * 100 : 0;
     return {
       ...pos,
