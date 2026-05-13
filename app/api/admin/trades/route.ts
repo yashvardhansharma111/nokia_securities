@@ -85,6 +85,7 @@ export async function POST(request: Request) {
 
     // Mark the created position as admin-placed so it never appears in Holdings
     if (side === "BUY") {
+      const db = await getDb();
       await db.collection("positions").updateOne(
         { userId: new ObjectId(userId), symbol, exchange, productType: productType || "CNC" },
         { $set: { source: "admin" } },
